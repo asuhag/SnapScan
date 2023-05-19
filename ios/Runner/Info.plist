@@ -12,6 +12,8 @@
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>needs access to write photo library to save barcode.jpeg</string>
 	<key>NSCameraUsageDescription</key>
 	<string>This app needs access to the camera to take pictures.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

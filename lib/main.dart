@@ -7,6 +7,7 @@ import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:image_gallery_saver/image_gallery_saver.dart';
 import 'package:path/path.dart';
+import 'package:share_extend/share_extend.dart';
 
 void main() {
   runApp(MyApp());
@@ -78,6 +79,27 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  Future shareImages() async {
+    final directory = await getApplicationDocumentsDirectory();
+    final path = directory.path;
+
+    List<String> imagePaths = [];
+    final dir = Directory(path);
+    if (dir.existsSync()) {
+      dir.listSync().forEach((file) {
+        if (file is File && basename(file.path).contains('.jpg')) {
+          imagePaths.add(file.path);
+        }
+      });
+    }
+
+    if (imagePaths.isNotEmpty) {
+      ShareExtend.shareMultiple(imagePaths, "image");
+    } else {
+      print('No images found');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -102,6 +124,10 @@ class _HomePageState extends State<HomePage> {
             ElevatedButton(
               onPressed: saveImageAndBarcode,
               child: Text('Save Image & Barcode'),
+            ),
+            ElevatedButton(
+              onPressed: shareImages,
+              child: Text('Share Images'),
             ),
           ],
         ),
