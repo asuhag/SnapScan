@@ -8,6 +8,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:image_gallery_saver/image_gallery_saver.dart';
 import 'package:path/path.dart';
 import 'package:share_extend/share_extend.dart';
+import 'package:sqflite/sqflite.dart';
 
 void main() {
   runApp(MyApp());
@@ -32,11 +33,34 @@ class _HomePageState extends State<HomePage> {
   File? imageFile;
   final picker = ImagePicker();
 
-  Future getImage() async {
+  // Database reference
+  late Database db;
+
+  @override
+  void initState() {
+    super.initState();
+    initDb();
+  }
+
+  Future<void> initDb() async {
+    var databasesPath = await getDatabasesPath();
+    String path = join(databasesPath, 'app_database.db');
+    db = await openDatabase(path, version: 1,
+        onCreate: (Database db, int version) async {
+      await db.execute(
+        'CREATE TABLE Images (id INTEGER PRIMARY KEY, image TEXT, barcode TEXT)',
+      );
+    });
+  }
+
+  Future getImageAndScan() async {
     final pickedFile = await picker.pickImage(source: ImageSource.camera);
 
     if (pickedFile != null) {
       imageFile = File(pickedFile.path);
+      // Add delay before scanning
+      await Future.delayed(const Duration(seconds: 1));
+      await scan();
       setState(() {});
     } else {
       print('No image selected.');
@@ -70,6 +94,8 @@ class _HomePageState extends State<HomePage> {
 
         // Save compressed image to gallery
         final result = await ImageGallerySaver.saveFile(compressedImage.path);
+        await db.insert(
+            'Images', {'image': result['filePath'], 'barcode': barcode});
         print('Image saved to gallery: $result');
       } else {
         print('Failed to compress image');
@@ -100,6 +126,25 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  Future shareBarcodes() async {
+    List<Map> list = await db.rawQuery('SELECT * FROM Images');
+    List<String> barcodes = [];
+    for (var item in list) {
+      barcodes.add(item['barcode']);
+    }
+
+    if (barcodes.isNotEmpty) {
+      final directory = await getApplicationDocumentsDirectory();
+      final path = directory.path;
+      final barcodeFile = File('$path/barcodes.txt');
+      await barcodeFile.writeAsString(barcodes.join('\n'));
+
+      ShareExtend.share(barcodeFile.path, "file");
+    } else {
+      print('No barcodes found');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -114,12 +159,8 @@ class _HomePageState extends State<HomePage> {
                 : Text('No image selected.'),
             Text('Barcode: $barcode'),
             ElevatedButton(
-              onPressed: getImage,
-              child: Text('Take Image of Front'),
-            ),
-            ElevatedButton(
-              onPressed: scan,
-              child: Text('Scan Barcode'),
+              onPressed: getImageAndScan,
+              child: Text('Take Image of Front & Scan barcode'),
             ),
             ElevatedButton(
               onPressed: saveImageAndBarcode,
@@ -128,6 +169,10 @@ class _HomePageState extends State<HomePage> {
             ElevatedButton(
               onPressed: shareImages,
               child: Text('Share Images'),
+            ),
+            ElevatedButton(
+              onPressed: shareBarcodes,
+              child: Text('Share Barcodes'),
             ),
           ],
         ),
