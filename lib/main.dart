@@ -37,6 +37,9 @@ class _HomePageState extends State<HomePage> {
   // Database reference
   late Database db;
 
+  // Context
+  late BuildContext myContext;
+
   @override
   void initState() {
     super.initState();
@@ -98,6 +101,27 @@ class _HomePageState extends State<HomePage> {
         await db.insert(
             'Images', {'image': result['filePath'], 'barcode': barcode});
         print('Image saved to gallery: $result');
+        showDialog(
+          context: myContext,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: Text('Data Saved'),
+              content: Text('Data saved to memory'),
+              actions: <Widget>[
+                TextButton(
+                  child: Text('Close'),
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => HomePage()),
+                    );
+                  },
+                ),
+              ],
+            );
+          },
+        );
       } else {
         print('Failed to compress image');
       }
@@ -148,6 +172,7 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    myContext = context;
     return Scaffold(
       appBar: AppBar(
         title: Text('Product Scanner'),
