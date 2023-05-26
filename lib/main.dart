@@ -6,7 +6,7 @@ import 'dart:io';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:image_gallery_saver/image_gallery_saver.dart';
-import 'package:path/path.dart';
+import 'package:path/path.dart' as p;
 import 'package:share_extend/share_extend.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -37,9 +37,6 @@ class _HomePageState extends State<HomePage> {
   // Database reference
   late Database db;
 
-  // Context
-  late BuildContext myContext;
-
   @override
   void initState() {
     super.initState();
@@ -48,11 +45,11 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> initDb() async {
     var databasesPath = await getDatabasesPath();
-    String path = join(databasesPath, 'app_database.db');
+    String path = p.join(databasesPath, 'app_database.db');
     db = await openDatabase(path, version: 1,
         onCreate: (Database db, int version) async {
       await db.execute(
-        'CREATE TABLE Images (id INTEGER PRIMARY KEY, image TEXT, barcode TEXT)',
+        'CREATE TABLE Images (id INTEGER PRIMARY KEY, image TEXT, barcode TEXT, timestamp TEXT)',
       );
     });
   }
@@ -74,7 +71,15 @@ class _HomePageState extends State<HomePage> {
   Future scan() async {
     try {
       ScanResult scanResult = await BarcodeScanner.scan();
-      setState(() => this.barcode = scanResult.rawContent);
+      if (scanResult.rawContent.isEmpty) {
+        final directory = await getApplicationDocumentsDirectory();
+        final path = directory.path;
+        final barcodeFile = File('$path/barcodes.txt');
+        await barcodeFile.writeAsString('no_barcode\n', mode: FileMode.append);
+        setState(() => this.barcode = 'no_barcode');
+      } else {
+        setState(() => this.barcode = scanResult.rawContent);
+      }
     } catch (e) {
       setState(() => this.barcode = 'Unknown error: $e');
     }
@@ -84,7 +89,10 @@ class _HomePageState extends State<HomePage> {
     if (await Permission.storage.request().isGranted) {
       final directory = await getApplicationDocumentsDirectory();
       final path = directory.path;
-      final newFileName = "$path/$barcode.jpg";
+
+      // Use timestamp to create a unique filename for the image
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final newFileName = "$path/$timestamp.jpg";
 
       // Compress image and save it as new file
       final compressedImage = await FlutterImageCompress.compressAndGetFile(
@@ -98,29 +106,17 @@ class _HomePageState extends State<HomePage> {
 
         // Save compressed image to gallery
         final result = await ImageGallerySaver.saveFile(compressedImage.path);
-        await db.insert(
-            'Images', {'image': result['filePath'], 'barcode': barcode});
+        await db.insert('Images', {
+          'image': compressedImage.path,
+          'barcode': barcode,
+          'timestamp': DateTime.now().toIso8601String()
+        });
         print('Image saved to gallery: $result');
-        showDialog(
-          context: myContext,
-          builder: (BuildContext context) {
-            return AlertDialog(
-              title: Text('Data Saved'),
-              content: Text('Data saved to memory'),
-              actions: <Widget>[
-                TextButton(
-                  child: Text('Close'),
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => HomePage()),
-                    );
-                  },
-                ),
-              ],
-            );
-          },
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Data saved to memory')));
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => HomePage()),
         );
       } else {
         print('Failed to compress image');
@@ -131,31 +127,39 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future shareImages() async {
-    final directory = await getApplicationDocumentsDirectory();
-    final path = directory.path;
+    List<Map> list = (await db.rawQuery('SELECT * FROM Images')).toList();
+    list.sort((a, b) => DateTime.parse(b['timestamp'])
+        .compareTo(DateTime.parse(a['timestamp'])));
+    List<String> sortedImagePaths = [];
 
-    List<String> imagePaths = [];
-    final dir = Directory(path);
-    if (dir.existsSync()) {
-      dir.listSync().forEach((file) {
-        if (file is File && basename(file.path).contains('.jpg')) {
-          imagePaths.add(file.path);
+    for (var item in list) {
+      if (item['image'] != null) {
+        File tempFile = File(item['image']);
+        if (tempFile.existsSync()) {
+          sortedImagePaths.add(item['image']);
         }
-      });
+      }
     }
 
-    if (imagePaths.isNotEmpty) {
-      ShareExtend.shareMultiple(imagePaths, "image");
+    if (sortedImagePaths.isNotEmpty) {
+      ShareExtend.shareMultiple(sortedImagePaths, "image");
     } else {
       print('No images found');
     }
   }
 
   Future shareBarcodes() async {
-    List<Map> list = await db.rawQuery('SELECT * FROM Images');
+    List<Map<String, dynamic>> resultList =
+        await db.rawQuery('SELECT * FROM Images');
+    List<Map<String, dynamic>> list =
+        List<Map<String, dynamic>>.from(resultList);
+
+    list.sort((a, b) => DateTime.parse(b['timestamp'])
+        .compareTo(DateTime.parse(a['timestamp'])));
+
     List<String> barcodes = [];
     for (var item in list) {
-      barcodes.add(item['barcode']);
+      barcodes.add(item['barcode'].toString());
     }
 
     if (barcodes.isNotEmpty) {
@@ -163,7 +167,6 @@ class _HomePageState extends State<HomePage> {
       final path = directory.path;
       final barcodeFile = File('$path/barcodes.txt');
       await barcodeFile.writeAsString(barcodes.join('\n'));
-
       ShareExtend.share(barcodeFile.path, "file");
     } else {
       print('No barcodes found');
@@ -172,7 +175,6 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    myContext = context;
     return Scaffold(
       appBar: AppBar(
         title: Text('Product Scanner'),
