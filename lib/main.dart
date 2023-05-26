@@ -3,6 +3,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:barcode_scan2/barcode_scan2.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
+import 'dart:convert';
+import 'package:archive/archive.dart';
+import 'package:archive/archive_io.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:image_gallery_saver/image_gallery_saver.dart';
@@ -71,17 +74,17 @@ class _HomePageState extends State<HomePage> {
   Future scan() async {
     try {
       ScanResult scanResult = await BarcodeScanner.scan();
-      if (scanResult.rawContent.isEmpty) {
-        final directory = await getApplicationDocumentsDirectory();
-        final path = directory.path;
-        final barcodeFile = File('$path/barcodes.txt');
-        await barcodeFile.writeAsString('no_barcode\n', mode: FileMode.append);
-        setState(() => this.barcode = 'no_barcode');
-      } else {
+
+      // Check if scanResult.rawContent is not empty and then set it as barcode
+      if (scanResult.rawContent.isNotEmpty) {
         setState(() => this.barcode = scanResult.rawContent);
+      } else {
+        // If scanResult.rawContent is empty, set barcode to be empty as well
+        setState(() => this.barcode = '');
       }
     } catch (e) {
-      setState(() => this.barcode = 'Unknown error: $e');
+      setState(() => this.barcode = '');
+      print('Error scanning barcode: $e');
     }
   }
 
@@ -90,9 +93,16 @@ class _HomePageState extends State<HomePage> {
       final directory = await getApplicationDocumentsDirectory();
       final path = directory.path;
 
-      // Use timestamp to create a unique filename for the image
+      // Create a filename based on barcode availability
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final newFileName = "$path/$timestamp.jpg";
+      String fileName;
+      if (barcode.isEmpty || barcode == 'Unknown error') {
+        fileName = "no_barcode_${timestamp}.jpeg";
+      } else {
+        fileName = "${barcode}_number.jpeg";
+      }
+
+      final newFileName = "$path/$fileName";
 
       // Compress image and save it as new file
       final compressedImage = await FlutterImageCompress.compressAndGetFile(
@@ -173,6 +183,47 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  Future shareImagesAndBarcodes() async {
+    // Initialize an Archive object to store our files
+    Archive archive = Archive();
+
+    // Get the directory
+    final directory = await getApplicationDocumentsDirectory();
+    final path = directory.path;
+
+    // List all files in the directory
+    final files = directory.listSync();
+
+    // For each file in the directory, add it to the archive
+    for (FileSystemEntity file in files) {
+      if (file is File) {
+        List<int>? fileBytes = file.readAsBytesSync();
+        if (fileBytes != null) {
+          String filePathInArchive = file.path.substring(path.length);
+          archive.addFile(
+              ArchiveFile(filePathInArchive, fileBytes.length, fileBytes));
+        }
+      }
+    }
+
+    // Encode the archive as a ZIP file
+    final zipEncoder = ZipEncoder();
+    final zipData = zipEncoder.encode(archive);
+
+    // Save the ZIP file to disk
+    final zipPath = p.join(path, '${DateTime.now().toIso8601String()}.zip');
+    final zipFile = File(zipPath);
+
+    // Write bytes to file, null check on zipData is included
+    if (zipData != null) {
+      zipFile.writeAsBytesSync(zipData);
+      // Share the zip file
+      ShareExtend.share(zipFile.path, "file");
+    } else {
+      print('Error: zipData is null');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -195,13 +246,9 @@ class _HomePageState extends State<HomePage> {
               child: Text('Save Image & Barcode'),
             ),
             ElevatedButton(
-              onPressed: shareImages,
-              child: Text('Share Images'),
-            ),
-            ElevatedButton(
-              onPressed: shareBarcodes,
-              child: Text('Share Barcodes'),
-            ),
+              onPressed: shareImagesAndBarcodes,
+              child: Text('Share Images and Barcodes'),
+            )
           ],
         ),
       ),
