@@ -136,7 +136,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future shareImages() async {
+  /*Future shareImages() async {
     List<Map> list = (await db.rawQuery('SELECT * FROM Images')).toList();
     list.sort((a, b) => DateTime.parse(b['timestamp'])
         .compareTo(DateTime.parse(a['timestamp'])));
@@ -181,6 +181,22 @@ class _HomePageState extends State<HomePage> {
     } else {
       print('No barcodes found');
     }
+  } */
+
+  Future<void> deleteAllFiles() async {
+    final directory = await getApplicationDocumentsDirectory();
+
+    // List all files in the directory
+    final files = directory.listSync();
+
+    // For each file in the directory, delete it
+    for (FileSystemEntity file in files) {
+      if (file is File) {
+        await file.delete();
+      }
+    }
+
+    print('All files deleted');
   }
 
   Future shareImagesAndBarcodes() async {
@@ -196,7 +212,7 @@ class _HomePageState extends State<HomePage> {
 
     // For each file in the directory, add it to the archive
     for (FileSystemEntity file in files) {
-      if (file is File) {
+      if (file is File && p.extension(file.path) == '.jpeg') {
         List<int>? fileBytes = file.readAsBytesSync();
         if (fileBytes != null) {
           String filePathInArchive = file.path.substring(path.length);
@@ -248,7 +264,37 @@ class _HomePageState extends State<HomePage> {
             ElevatedButton(
               onPressed: shareImagesAndBarcodes,
               child: Text('Share Images and Barcodes'),
-            )
+            ),
+            ElevatedButton(
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (BuildContext context) {
+                    return AlertDialog(
+                      title: Text('Confirmation'),
+                      content:
+                          Text('Are you sure you want to delete all images?'),
+                      actions: <Widget>[
+                        TextButton(
+                          child: Text('Cancel'),
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                          },
+                        ),
+                        TextButton(
+                          child: Text('Yes'),
+                          onPressed: () {
+                            deleteAllFiles();
+                            Navigator.of(context).pop();
+                          },
+                        ),
+                      ],
+                    );
+                  },
+                );
+              },
+              child: Text('Delete All Images'),
+            ),
           ],
         ),
       ),
