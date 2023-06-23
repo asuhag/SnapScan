@@ -1,4 +1,3 @@
-# image_app
 A flutter app that can be used for :-
 
 Inventory Management: It allows businesses to keep track of their inventory using barcodes. This can ensure that they always know how much stock they have and can help to prevent both understocking and overstocking.
