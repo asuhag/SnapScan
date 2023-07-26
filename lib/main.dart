@@ -35,13 +35,26 @@ class _HomePageState extends State<HomePage> {
   String barcode = '';
   File? imageFile;
   final picker = ImagePicker();
+  int jpegCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _updateJpegCount();
+  }
+
+  Future<void> _updateJpegCount() async {
+    int count = await _getImageFileCount();
+    setState(() {
+      jpegCount = count;
+    });
+  }
 
   Future getImageAndScan() async {
     final pickedFile = await picker.pickImage(source: ImageSource.camera);
 
     if (pickedFile != null) {
       imageFile = File(pickedFile.path);
-      // Add delay before scanning
       await Future.delayed(const Duration(seconds: 1));
       await scan();
       setState(() {});
@@ -54,11 +67,9 @@ class _HomePageState extends State<HomePage> {
     try {
       ScanResult scanResult = await BarcodeScanner.scan();
 
-      // Check if scanResult.rawContent is not empty and then set it as barcode
       if (scanResult.rawContent.isNotEmpty) {
         setState(() => this.barcode = scanResult.rawContent);
       } else {
-        // If scanResult.rawContent is empty, set barcode to be empty as well
         setState(() => this.barcode = '');
       }
     } catch (e) {
@@ -72,7 +83,6 @@ class _HomePageState extends State<HomePage> {
       final directory = await getApplicationDocumentsDirectory();
       final path = directory.path;
 
-      // Create a filename based on barcode availability
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       String fileName;
       if (barcode.isEmpty) {
@@ -83,7 +93,6 @@ class _HomePageState extends State<HomePage> {
 
       final newFileName = "$path/$fileName";
 
-      // Compress image and save it as new file
       final compressedImage = await FlutterImageCompress.compressAndGetFile(
         imageFile!.path,
         newFileName,
@@ -93,11 +102,9 @@ class _HomePageState extends State<HomePage> {
       if (compressedImage != null) {
         print('Compressed image saved to: ${compressedImage.path}');
 
-        // Save compressed image to gallery
         final result = await ImageGallerySaver.saveFile(compressedImage.path);
         print('Image saved to gallery: $result');
 
-        // Dispose imageFile after saving image to gallery
         imageFile = null;
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Data saved to memory')));
@@ -105,14 +112,9 @@ class _HomePageState extends State<HomePage> {
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (context) => HomePage()),
-          (Route<dynamic> route) =>
-              false, // This will remove all previous routes
+          (Route<dynamic> route) => false,
         );
-
-        /*Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => HomePage()),
-        );*/
+        _updateJpegCount();
       } else {
         print('Failed to compress image');
       }
@@ -121,34 +123,40 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  Future<int> _getImageFileCount() async {
+    final directory = await getApplicationDocumentsDirectory();
+
+    final files = directory.listSync();
+
+    int jpegCount =
+        files.where((file) => p.extension(file.path) == '.jpeg').length;
+
+    return jpegCount;
+  }
+
   Future<void> deleteAllFiles() async {
     final directory = await getApplicationDocumentsDirectory();
 
-    // List all files in the directory
     final files = directory.listSync();
 
-    // For each file in the directory, delete it
     for (FileSystemEntity file in files) {
       if (file is File) {
         await file.delete();
       }
     }
 
+    _updateJpegCount();
     print('All files deleted');
   }
 
   Future shareImagesAndBarcodes() async {
-    // Initialize an Archive object to store our files
     Archive archive = Archive();
 
-    // Get the directory
     final directory = await getApplicationDocumentsDirectory();
     final path = directory.path;
 
-    // List all files in the directory
     final files = directory.listSync();
 
-    // For each file in the directory, add it to the archive
     for (FileSystemEntity file in files) {
       if (file is File && p.extension(file.path) == '.jpeg') {
         List<int> fileBytes = await file.readAsBytes();
@@ -158,18 +166,14 @@ class _HomePageState extends State<HomePage> {
       }
     }
 
-    // Encode the archive as a ZIP file
     final zipEncoder = ZipEncoder();
     final zipData = zipEncoder.encode(archive);
 
-    // Save the ZIP file to disk
     final zipPath = p.join(path, '${DateTime.now().toIso8601String()}.zip');
     final zipFile = File(zipPath);
 
-    // Write bytes to file, null check on zipData is included
     if (zipData != null) {
       zipFile.writeAsBytesSync(zipData);
-      // Share the zip file
       ShareExtend.share(zipFile.path, "file");
     } else {
       print('Error: zipData is null');
@@ -186,10 +190,10 @@ class _HomePageState extends State<HomePage> {
         child: ListView(
           children: <Widget>[
             imageFile != null
-                ? Image.file(
-                    imageFile!) //Image.memory(File(imageFile!.path).readAsBytesSync())
+                ? Image.file(imageFile!)
                 : Text('No image selected.'),
             Text('Barcode: $barcode'),
+            Text('Number of images in app folder: $jpegCount'),
             ElevatedButton(
               onPressed: getImageAndScan,
               child: Text('Take Image of Front & Scan barcode'),
@@ -198,10 +202,6 @@ class _HomePageState extends State<HomePage> {
               onPressed: saveImageAndBarcode,
               child: Text('Save Image & Barcode'),
             ),
-            /*ElevatedButton(
-              onPressed: generateImages,
-              child: Text('Generate Images'),
-            ),*/
             ElevatedButton(
               onPressed: shareImagesAndBarcodes,
               child: Text('Share Images and Barcodes'),
