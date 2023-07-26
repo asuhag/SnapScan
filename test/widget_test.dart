@@ -7,7 +7,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:ScanSnapShare/main.dart';
+import 'package:ScanSnap/main.dart';
 //import 'package:image_app/main.dart';
 
 void main() {
