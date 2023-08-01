@@ -67,14 +67,39 @@ class _HomePageState extends State<HomePage> {
     try {
       ScanResult scanResult = await BarcodeScanner.scan();
 
-      if (scanResult.rawContent.isNotEmpty) {
+      // Verify if the code is EAN 8 or EAN 13
+      RegExp exp = RegExp(r"^(?:\d{8}|\d{13})$");
+
+      if (scanResult.rawContent.isNotEmpty &&
+          exp.hasMatch(scanResult.rawContent)) {
+        if (scanResult.rawContent.length == 8 &&
+            (scanResult.rawContent.startsWith('0') ||
+                scanResult.rawContent.startsWith('2'))) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(
+                  'Scanned product is by a store brand. Please scan a new product')));
+          setState(() => this.barcode = '');
+          return;
+        }
+        if (scanResult.rawContent.length == 13 &&
+            (scanResult.rawContent.startsWith('04') ||
+                scanResult.rawContent.startsWith('0'))) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(
+                  'Scanned product is by a store brand or of unsupported barcode format. Please scan a new product')));
+          setState(() => this.barcode = '');
+          return;
+        }
         setState(() => this.barcode = scanResult.rawContent);
       } else {
         setState(() => this.barcode = '');
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Barcode format is not supported. ')));
       }
     } catch (e) {
       setState(() => this.barcode = '');
-      print('Error scanning barcode: $e');
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Error scanning barcode: $e')));
     }
   }
 
