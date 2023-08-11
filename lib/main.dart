@@ -36,6 +36,7 @@ class _HomePageState extends State<HomePage> {
   File? imageFile;
   final picker = ImagePicker();
   int jpegCount = 0;
+  String message = '';
 
   @override
   void initState() {
@@ -56,14 +57,23 @@ class _HomePageState extends State<HomePage> {
     if (pickedFile != null) {
       imageFile = File(pickedFile.path);
       await Future.delayed(const Duration(seconds: 1));
-      await scan();
-      setState(() {});
+      String? scannedResult = await scan();
+
+      if (scannedResult != 'invalid_product') {
+        await saveImageAndBarcode();
+      } else if (scannedResult != 'invalid_product') {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+              'Barcode format is not supported, proceed with scanning next product'),
+          duration: Duration(seconds: 1),
+        ));
+      }
     } else {
       print('No image selected.');
     }
   }
 
-  Future scan() async {
+  Future<String?> scan() async {
     try {
       ScanResult scanResult = await BarcodeScanner.scan();
 
@@ -72,39 +82,50 @@ class _HomePageState extends State<HomePage> {
 
       if (scanResult.rawContent.isNotEmpty &&
           exp.hasMatch(scanResult.rawContent)) {
-        if (scanResult.rawContent.length == 8 &&
-            (scanResult.rawContent.startsWith('0') ||
-                scanResult.rawContent.startsWith('2'))) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text(
-                  'Scanned product is by a store brand. Please scan a new product')));
-          setState(() => this.barcode = '');
-          return;
+        // Invalid EAN 8 or EAN 13 barcodes
+        if ((scanResult.rawContent.length == 8 &&
+                (scanResult.rawContent.startsWith('0') ||
+                    scanResult.rawContent.startsWith('2'))) ||
+            (scanResult.rawContent.length == 13 &&
+                (scanResult.rawContent.startsWith('04') ||
+                    scanResult.rawContent.startsWith('0')))) {
+          setState(() {
+            this.barcode = 'invalid_product';
+            this.message =
+                'Invalid barcode format. Proceed with scanning next product.';
+          });
+          return 'invalid_product';
         }
-        if (scanResult.rawContent.length == 13 &&
-            (scanResult.rawContent.startsWith('04') ||
-                scanResult.rawContent.startsWith('0'))) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text(
-                  'Scanned product is by a store brand or of unsupported barcode format. Please scan a new product')));
-          setState(() => this.barcode = '');
-          return;
+        // Valid EAN 8 or EAN 13 barcodes
+        else {
+          setState(() => this.barcode = scanResult.rawContent);
+          return scanResult.rawContent;
         }
-        setState(() => this.barcode = scanResult.rawContent);
-      } else {
+      }
+      // If the barcode is neither EAN 8 nor EAN 13
+      else if (!exp.hasMatch(scanResult.rawContent) &&
+          scanResult.rawContent.isNotEmpty) {
+        setState(() => this.barcode = 'invalid_product');
+        return 'invalid_product';
+      }
+      // Other edge cases, such as user closing the scanner without scanning
+      else {
         setState(() => this.barcode = '');
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Barcode format is not supported. ')));
+        return null;
       }
     } catch (e) {
       setState(() => this.barcode = '');
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Error scanning barcode: $e')));
+      print('Error scanning barcode: $e');
+      return null;
     }
   }
 
   Future saveImageAndBarcode() async {
+    // Request for storage permission
+
     if (await Permission.storage.request().isGranted) {
+      // Continue with your function if permission is granted
+
       final directory = await getApplicationDocumentsDirectory();
       final path = directory.path;
 
@@ -112,7 +133,17 @@ class _HomePageState extends State<HomePage> {
       String fileName;
       if (barcode.isEmpty) {
         fileName = "no_barcode_${timestamp}.jpeg";
-      } else {
+      } /*else if (!barcode.isEmpty && barcode == 'invalid_product') {
+        // If barcode is not empty and doesn't match EAN8 or EAN13, don't save the image
+        fileName = "in_store_brand_${timestamp}_${barcode}.jpeg";
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+              'Barcode format is not supported, proceed with scanning next product'),
+          duration: Duration(seconds: 1),
+        ));
+        print('Barcode format is not supported, image not saved.');
+      }*/
+      else {
         fileName = "${barcode}_number.jpeg";
       }
 
@@ -218,15 +249,20 @@ class _HomePageState extends State<HomePage> {
                 ? Image.file(imageFile!)
                 : Text('No image selected.'),
             Text('Barcode: $barcode'),
+            SizedBox(height: 10),
+            Text(
+              message,
+              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
+            ),
             Text('Number of images in app folder: $jpegCount'),
             ElevatedButton(
               onPressed: getImageAndScan,
               child: Text('Take Image of Front & Scan barcode'),
             ),
-            ElevatedButton(
+            /*ElevatedButton(
               onPressed: saveImageAndBarcode,
               child: Text('Save Image & Barcode'),
-            ),
+            ),*/
             ElevatedButton(
               onPressed: shareImagesAndBarcodes,
               child: Text('Share Images and Barcodes'),
