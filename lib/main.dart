@@ -92,7 +92,7 @@ class _HomePageState extends State<HomePage> {
           setState(() {
             this.barcode = 'invalid_product';
             this.message =
-                'Invalid barcode format. Proceed with scanning next product.';
+                'Invalid barcode format. Please try scanning again or proceed scanning next product.';
           });
           return 'invalid_product';
         }
